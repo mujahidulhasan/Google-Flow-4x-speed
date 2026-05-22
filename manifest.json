@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Google Flow Cleaner",
+  "description": "Cleaner UI for Google Flow.",
+  "version": "1.0.0",
+
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+
+  "host_permissions": [
+    "https://flow.google.com/*",
+    "https://labs.google/fx/*"
+  ],
+
+  "action": {
+    "default_popup": "popup.html"
+  },
+
+  "content_scripts": [
+    {
+      "matches": [
+        "https://flow.google.com/*",
+        "https://labs.google/fx/*"
+      ],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_start"
+    }
+  ]
+}
