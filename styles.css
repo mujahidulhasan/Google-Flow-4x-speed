@@ -1,0 +1,49 @@
+html.flow-cleaner-enabled *,
+html.flow-cleaner-enabled *::before,
+html.flow-cleaner-enabled *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
+
+html.flow-cleaner-enabled *[style*="translateY"],
+html.flow-cleaner-enabled *[style*="translateX"],
+html.flow-cleaner-enabled *[style*="scale("],
+html.flow-cleaner-enabled *[style*="rotate("] {
+  transform: none !important;
+}
+
+html.flow-cleaner-enabled *[style*="blur"],
+html.flow-cleaner-enabled *[style*="backdrop-filter"] {
+  backdrop-filter: none !important;
+  filter: none !important;
+}
+
+html.flow-cleaner-enabled *[style*="opacity"] {
+  transition: none !important;
+}
+
+html.flow-cleaner-enabled video {
+  animation: none !important;
+  transition: none !important;
+  transform: none !important;
+}
+
+html.flow-cleaner-enabled .material-icons,
+html.flow-cleaner-enabled .google-symbols {
+  transition: none !important;
+}
+
+html.flow-cleaner-enabled [aria-label="Video progress"] {
+  animation: none !important;
+  transition: none !important;
+}
+
+html.flow-cleaner-enabled button[aria-label*="Banner"],
+html.flow-cleaner-enabled button[aria-label*="banner"] {
+  display: none !important;
+}
+
+html.flow-cleaner-enabled *:hover {
+  transform: none !important;
+}
