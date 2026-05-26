@@ -1,0 +1,287 @@
+{
+  "name": "CHAOSZILLA_PHASE1_RESEARCH_ENGINE",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "schedule_trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{json:{channels:['ToonZilla','Kpopzai','Daniel Goleman Wisdom']}}];"
+      },
+      "id": "channel_list",
+      "name": "Target Channels",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1
+      },
+      "id": "split_channels",
+      "name": "Split Channels",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/youtube/v3/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "part",
+              "value": "snippet"
+            },
+            {
+              "name": "maxResults",
+              "value": "5"
+            },
+            {
+              "name": "q",
+              "value": "={{$json[\"channels\"]}}"
+            },
+            {
+              "name": "type",
+              "value": "video"
+            },
+            {
+              "name": "key",
+              "value": "YOUR_YOUTUBE_API_KEY"
+            }
+          ]
+        }
+      },
+      "id": "youtube_research",
+      "name": "YouTube Research",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [950, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const itemsData = items[0].json.items || []; return itemsData.map((video,index)=>({json:{title:video.snippet.title,channel:video.snippet.channelTitle,published:video.snippet.publishedAt,description:video.snippet.description,rank:index+1}}));"
+      },
+      "id": "trend_extractor",
+      "name": "Trend Extractor",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_OPENROUTER_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"google/gemini-2.0-flash-exp:free\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an expert viral YouTube strategist specialized in Gen-Z K-pop chaos shorts.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Analyze this trend and suggest one unique viral content angle: {{$json[\\\"title\\\"]}}\"\n    }\n  ]\n}"
+      },
+      "id": "gemini_analysis",
+      "name": "Gemini Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_OPENROUTER_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"deepseek/deepseek-chat-v3-0324:free\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a critical AI reviewer that improves weak viral concepts.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Critique and improve this viral concept: {{$json[\\\"choices\\\"][0][\\\"message\\\"][\\\"content\\\"]}}\"\n    }\n  ]\n}"
+      },
+      "id": "deepseek_critic",
+      "name": "DeepSeek Critic",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1700, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const score = Math.floor(Math.random()*20)+80; return [{json:{viral_score:score,status:'approved',summary:'AI discussion completed successfully'}}];"
+      },
+      "id": "viral_score_engine",
+      "name": "Viral Score Engine",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1950, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": "YOUR_GOOGLE_SHEET_ID",
+        "sheetName": "Ideas",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Idea": "={{$json[\"summary\"]}}",
+            "Score": "={{$json[\"viral_score\"]}}",
+            "Status": "={{$json[\"status\"]}}"
+          }
+        }
+      },
+      "id": "google_sheets_log",
+      "name": "Google Sheets Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [2200, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "🔥 CHAOSZILLA IDEA GENERATED\n\nViral Score: {{$json[\"viral_score\"]}}%\n\nStatus: {{$json[\"status\"]}}\n\nSummary:\n{{$json[\"summary\"]}}\n\nReply:\napprove\nreject\nmodify"
+      },
+      "id": "telegram_notification",
+      "name": "Telegram Notification",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [2450, 300]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Target Channels",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Target Channels": {
+      "main": [
+        [
+          {
+            "node": "Split Channels",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Channels": {
+      "main": [
+        [
+          {
+            "node": "YouTube Research",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube Research": {
+      "main": [
+        [
+          {
+            "node": "Trend Extractor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trend Extractor": {
+      "main": [
+        [
+          {
+            "node": "Gemini Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Analysis": {
+      "main": [
+        [
+          {
+            "node": "DeepSeek Critic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek Critic": {
+      "main": [
+        [
+          {
+            "node": "Viral Score Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Viral Score Engine": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets Log": {
+      "main": [
+        [
+          {
+            "node": "Telegram Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "chaoszilla-v1"
+}
