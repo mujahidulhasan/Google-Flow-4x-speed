@@ -1,5 +1,5 @@
 {
-  "name": "CHAOSZILLA_CHANNEL_ANALYZER_V1",
+  "name": "CHAOSZILLA_SUBSCRIPTION_ANALYZER_V1",
   "nodes": [
     {
       "parameters": {
@@ -23,15 +23,53 @@
     },
     {
       "parameters": {
-        "documentId": "YOUR_GOOGLE_SHEET_ID",
-        "sheetName": "Channels"
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "url": "https://www.googleapis.com/youtube/v3/subscriptions",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "part",
+              "value": "snippet"
+            },
+            {
+              "name": "mine",
+              "value": "true"
+            },
+            {
+              "name": "maxResults",
+              "value": "50"
+            }
+          ]
+        },
+        "options": {}
       },
-      "id": "read_channels",
-      "name": "Read Channel List",
-      "type": "n8n-nodes-base.googleSheets",
+      "id": "get_subscriptions",
+      "name": "Get Subscribed Channels",
+      "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
       "position": [
         450,
+        300
+      ],
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "YOUR_GOOGLE_OAUTH_ID",
+          "name": "YouTube OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const channels = items[0].json.items || [];\n\nreturn channels.map(channel => {\n  return {\n    json: {\n      channelTitle: channel.snippet.title,\n      channelId: channel.snippet.resourceId.channelId\n    }\n  };\n});"
+      },
+      "id": "extract_channels",
+      "name": "Extract Channel IDs",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        700,
         300
       ]
     },
@@ -44,13 +82,13 @@
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 1,
       "position": [
-        700,
+        950,
         300
       ]
     },
     {
       "parameters": {
-        "method": "GET",
+        "authentication": "none",
         "url": "https://www.googleapis.com/youtube/v3/search",
         "sendQuery": true,
         "queryParameters": {
@@ -60,8 +98,12 @@
               "value": "snippet"
             },
             {
-              "name": "q",
-              "value": "={{$json[\"Channel\"]}}"
+              "name": "channelId",
+              "value": "={{$json[\"channelId\"]}}"
+            },
+            {
+              "name": "order",
+              "value": "date"
             },
             {
               "name": "type",
@@ -69,11 +111,7 @@
             },
             {
               "name": "maxResults",
-              "value": "10"
-            },
-            {
-              "name": "order",
-              "value": "date"
+              "value": "5"
             },
             {
               "name": "key",
@@ -82,23 +120,10 @@
           ]
         }
       },
-      "id": "youtube_search",
-      "name": "YouTube Search",
+      "id": "get_latest_uploads",
+      "name": "Get Latest Uploads",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [
-        950,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "functionCode": "const videos = items[0].json.items || [];\nreturn videos.map(video => {\n  const title = video.snippet.title;\n  const published = new Date(video.snippet.publishedAt);\n  const now = new Date();\n  const hoursAgo = Math.max(1, (now - published) / 3600000);\n\n  return {\n    json: {\n      title,\n      description: video.snippet.description,\n      channel: video.snippet.channelTitle,\n      thumbnail: video.snippet.thumbnails.high.url,\n      publishedAt: video.snippet.publishedAt,\n      hoursAgo: Math.floor(hoursAgo)\n    }\n  }\n});"
-      },
-      "id": "extract_video_data",
-      "name": "Extract Video Data",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
       "position": [
         1200,
         300
@@ -106,29 +131,12 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://openrouter.ai/api/v1/chat/completions",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "Bearer YOUR_OPENROUTER_API_KEY"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"google/gemini-2.0-flash-exp:free\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a viral YouTube shorts analyst AI. Analyze niche channel psychology deeply.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Analyze this video title and predict why it may go viral. Detect hook style, emotional engine, thumbnail psychology, cliffhanger style, and possible trend pattern. Video title: {{$json[\\\"title\\\"]}}\"\n    }\n  ]\n}"
+        "functionCode": "const videos = items[0].json.items || [];\n\nreturn videos.map(video => {\n  return {\n    json: {\n      title: video.snippet.title,\n      description: video.snippet.description,\n      publishedAt: video.snippet.publishedAt,\n      thumbnail: video.snippet.thumbnails.high.url,\n      videoId: video.id.videoId,\n      channelTitle: video.snippet.channelTitle\n    }\n  };\n});"
       },
-      "id": "gemini_analysis",
-      "name": "Gemini Trend Analysis",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
+      "id": "extract_video_data",
+      "name": "Extract Video Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
       "position": [
         1450,
         300
@@ -136,27 +144,28 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://openrouter.ai/api/v1/chat/completions",
-        "sendHeaders": true,
-        "headerParameters": {
+        "authentication": "none",
+        "url": "https://www.googleapis.com/youtube/v3/videos",
+        "sendQuery": true,
+        "queryParameters": {
           "parameters": [
             {
-              "name": "Authorization",
-              "value": "Bearer YOUR_OPENROUTER_API_KEY"
+              "name": "part",
+              "value": "statistics"
             },
             {
-              "name": "Content-Type",
-              "value": "application/json"
+              "name": "id",
+              "value": "={{$json[\"videoId\"]}}"
+            },
+            {
+              "name": "key",
+              "value": "YOUR_YOUTUBE_API_KEY"
             }
           ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"deepseek/deepseek-chat-v3-0324:free\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a critical trend analysis AI. Find hidden opportunities competitors are missing.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Critique and improve this analysis. Find trend gaps and unexplored viral opportunities: {{$json[\\\"choices\\\"][0][\\\"message\\\"][\\\"content\\\"]}}\"\n    }\n  ]\n}"
+        }
       },
-      "id": "deepseek_gap_analysis",
-      "name": "DeepSeek Gap Analysis",
+      "id": "video_statistics",
+      "name": "Get Video Statistics",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
       "position": [
@@ -166,10 +175,10 @@
     },
     {
       "parameters": {
-        "functionCode": "const report = items[0].json.choices[0].message.content;\nreturn [{json:{report}}];"
+        "functionCode": "const stats = items[0].json.items[0].statistics;\n\nconst views = Number(stats.viewCount || 0);\n\nconst published = new Date($json.publishedAt || new Date());\nconst now = new Date();\n\nconst hoursAgo = Math.max(1, (now - published) / 3600000);\n\nconst velocity = Math.floor(views / hoursAgo);\n\nlet trend = 'low';\n\nif (velocity > 50000) trend = 'exploding';\nelse if (velocity > 10000) trend = 'strong';\nelse if (velocity > 3000) trend = 'growing';\n\nreturn [{\n  json: {\n    ...$json,\n    views,\n    velocity,\n    trend\n  }\n}];"
       },
-      "id": "build_report",
-      "name": "Build Trend Report",
+      "id": "calculate_velocity",
+      "name": "Calculate Trend Velocity",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
       "position": [
@@ -179,19 +188,28 @@
     },
     {
       "parameters": {
-        "operation": "append",
-        "documentId": "YOUR_GOOGLE_SHEET_ID",
-        "sheetName": "TrendReports",
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "Report": "={{$json[\"report\"]}}"
-          }
-        }
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_OPENROUTER_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"google/gemini-2.0-flash-exp:free\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an elite YouTube trend analysis AI.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Analyze this YouTube Shorts video. Find hook psychology, emotional trigger, thumbnail psychology, cliffhanger pattern, why viewers clicked, retention possibility, trend potential, and unexplored opportunity. Title: {{$json[\\\"title\\\"]}} Trend Status: {{$json[\\\"trend\\\"]}} Views: {{$json[\\\"views\\\"]}}\"\n    }\n  ]\n}"
       },
-      "id": "save_report",
-      "name": "Save Trend Report",
-      "type": "n8n-nodes-base.googleSheets",
+      "id": "gemini_analysis",
+      "name": "Gemini Trend Analysis",
+      "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
       "position": [
         2200,
@@ -201,10 +219,10 @@
     {
       "parameters": {
         "chatId": "YOUR_TELEGRAM_CHAT_ID",
-        "text": "🔥 CHAOSZILLA TREND REPORT\n\n{{$json[\"report\"]}}"
+        "text": "🔥 TREND DETECTED\n\nChannel: {{$json[\"channelTitle\"]}}\n\nTitle: {{$json[\"title\"]}}\n\nViews: {{$json[\"views\"]}}\n\nVelocity: {{$json[\"velocity\"]}}\n\nTrend: {{$json[\"trend\"]}}\n\nAI Analysis:\n{{$json[\"choices\"][0][\"message\"][\"content\"]}}"
       },
-      "id": "telegram_send",
-      "name": "Telegram Send",
+      "id": "telegram_report",
+      "name": "Telegram Trend Report",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1,
       "position": [
@@ -218,14 +236,25 @@
       "main": [
         [
           {
-            "node": "Read Channel List",
+            "node": "Get Subscribed Channels",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Read Channel List": {
+    "Get Subscribed Channels": {
+      "main": [
+        [
+          {
+            "node": "Extract Channel IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Channel IDs": {
       "main": [
         [
           {
@@ -240,14 +269,14 @@
       "main": [
         [
           {
-            "node": "YouTube Search",
+            "node": "Get Latest Uploads",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "YouTube Search": {
+    "Get Latest Uploads": {
       "main": [
         [
           {
@@ -262,6 +291,28 @@
       "main": [
         [
           {
+            "node": "Get Video Statistics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Video Statistics": {
+      "main": [
+        [
+          {
+            "node": "Calculate Trend Velocity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Trend Velocity": {
+      "main": [
+        [
+          {
             "node": "Gemini Trend Analysis",
             "type": "main",
             "index": 0
@@ -273,40 +324,7 @@
       "main": [
         [
           {
-            "node": "DeepSeek Gap Analysis",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "DeepSeek Gap Analysis": {
-      "main": [
-        [
-          {
-            "node": "Build Trend Report",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build Trend Report": {
-      "main": [
-        [
-          {
-            "node": "Save Trend Report",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Save Trend Report": {
-      "main": [
-        [
-          {
-            "node": "Telegram Send",
+            "node": "Telegram Trend Report",
             "type": "main",
             "index": 0
           }
@@ -316,5 +334,5 @@
   },
   "active": false,
   "settings": {},
-  "versionId": "CHAOSZILLA_CHANNEL_ANALYZER_V1"
+  "versionId": "CHAOSZILLA_SUBSCRIPTION_ANALYZER_V1"
 }
