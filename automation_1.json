@@ -1,338 +1,145 @@
-{
-  "name": "CHAOSZILLA_SUBSCRIPTION_ANALYZER_V1",
-  "nodes": [
-    {
-      "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "hours",
-              "hoursInterval": 6
-            }
-          ]
-        }
-      },
-      "id": "schedule_trigger",
-      "name": "Schedule Trigger",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1,
-      "position": [
-        200,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "googleOAuth2Api",
-        "url": "https://www.googleapis.com/youtube/v3/subscriptions",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "part",
-              "value": "snippet"
+from pathlib import Path
+import json
+
+workflow = {
+    "name": "Auto Clean Gmail Promotions",
+    "nodes": [
+        {
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "field": "minutes",
+                            "minutesInterval": 15
+                        }
+                    ]
+                }
             },
-            {
-              "name": "mine",
-              "value": "true"
-            },
-            {
-              "name": "maxResults",
-              "value": "50"
-            }
-          ]
+            "id": "1",
+            "name": "Schedule Trigger",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1.1,
+            "position": [200, 300]
         },
-        "options": {}
-      },
-      "id": "get_subscriptions",
-      "name": "Get Subscribed Channels",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [
-        450,
-        300
-      ],
-      "credentials": {
-        "googleOAuth2Api": {
-          "id": "YOUR_GOOGLE_OAUTH_ID",
-          "name": "YouTube OAuth"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "functionCode": "const channels = items[0].json.items || [];\n\nreturn channels.map(channel => {\n  return {\n    json: {\n      channelTitle: channel.snippet.title,\n      channelId: channel.snippet.resourceId.channelId\n    }\n  };\n});"
-      },
-      "id": "extract_channels",
-      "name": "Extract Channel IDs",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
-      "position": [
-        700,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "batchSize": 1
-      },
-      "id": "split_channels",
-      "name": "Split Channels",
-      "type": "n8n-nodes-base.splitInBatches",
-      "typeVersion": 1,
-      "position": [
-        950,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "authentication": "none",
-        "url": "https://www.googleapis.com/youtube/v3/search",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "part",
-              "value": "snippet"
+        {
+            "parameters": {
+                "operation": "getAll",
+                "filters": {
+                    "q": "category:promotions OR category:social OR unsubscribe newer_than:7d"
+                },
+                "returnAll": True
             },
-            {
-              "name": "channelId",
-              "value": "={{$json[\"channelId\"]}}"
-            },
-            {
-              "name": "order",
-              "value": "date"
-            },
-            {
-              "name": "type",
-              "value": "video"
-            },
-            {
-              "name": "maxResults",
-              "value": "5"
-            },
-            {
-              "name": "key",
-              "value": "YOUR_YOUTUBE_API_KEY"
+            "id": "2",
+            "name": "Find Unwanted Emails",
+            "type": "n8n-nodes-base.gmail",
+            "typeVersion": 2.1,
+            "position": [450, 300],
+            "credentials": {
+                "gmailOAuth2": {
+                    "id": "YOUR_GMAIL_CREDENTIAL_ID",
+                    "name": "Gmail Account"
+                }
             }
-          ]
-        }
-      },
-      "id": "get_latest_uploads",
-      "name": "Get Latest Uploads",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [
-        1200,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "functionCode": "const videos = items[0].json.items || [];\n\nreturn videos.map(video => {\n  return {\n    json: {\n      title: video.snippet.title,\n      description: video.snippet.description,\n      publishedAt: video.snippet.publishedAt,\n      thumbnail: video.snippet.thumbnails.high.url,\n      videoId: video.id.videoId,\n      channelTitle: video.snippet.channelTitle\n    }\n  };\n});"
-      },
-      "id": "extract_video_data",
-      "name": "Extract Video Data",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
-      "position": [
-        1450,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "authentication": "none",
-        "url": "https://www.googleapis.com/youtube/v3/videos",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "part",
-              "value": "statistics"
-            },
-            {
-              "name": "id",
-              "value": "={{$json[\"videoId\"]}}"
-            },
-            {
-              "name": "key",
-              "value": "YOUR_YOUTUBE_API_KEY"
-            }
-          ]
-        }
-      },
-      "id": "video_statistics",
-      "name": "Get Video Statistics",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [
-        1700,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "functionCode": "const stats = items[0].json.items[0].statistics;\n\nconst views = Number(stats.viewCount || 0);\n\nconst published = new Date($json.publishedAt || new Date());\nconst now = new Date();\n\nconst hoursAgo = Math.max(1, (now - published) / 3600000);\n\nconst velocity = Math.floor(views / hoursAgo);\n\nlet trend = 'low';\n\nif (velocity > 50000) trend = 'exploding';\nelse if (velocity > 10000) trend = 'strong';\nelse if (velocity > 3000) trend = 'growing';\n\nreturn [{\n  json: {\n    ...$json,\n    views,\n    velocity,\n    trend\n  }\n}];"
-      },
-      "id": "calculate_velocity",
-      "name": "Calculate Trend Velocity",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
-      "position": [
-        1950,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://openrouter.ai/api/v1/chat/completions",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "Bearer YOUR_OPENROUTER_API_KEY"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
         },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"google/gemini-2.0-flash-exp:free\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an elite YouTube trend analysis AI.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Analyze this YouTube Shorts video. Find hook psychology, emotional trigger, thumbnail psychology, cliffhanger pattern, why viewers clicked, retention possibility, trend potential, and unexplored opportunity. Title: {{$json[\\\"title\\\"]}} Trend Status: {{$json[\\\"trend\\\"]}} Views: {{$json[\\\"views\\\"]}}\"\n    }\n  ]\n}"
-      },
-      "id": "gemini_analysis",
-      "name": "Gemini Trend Analysis",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [
-        2200,
-        300
-      ]
+        {
+            "parameters": {
+                "jsCode": """
+const importantKeywords = [
+  'otp',
+  'verification',
+  'security',
+  'bank',
+  'payment',
+  'invoice',
+  'receipt',
+  'important',
+  'login',
+  'password'
+];
+
+return items.filter(item => {
+  const subject = (item.json.subject || '').toLowerCase();
+  const snippet = (item.json.snippet || '').toLowerCase();
+
+  const isImportant = importantKeywords.some(word =>
+    subject.includes(word) || snippet.includes(word)
+  );
+
+  return !isImportant;
+});
+"""
+            },
+            "id": "3",
+            "name": "Filter Important Emails",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [700, 300]
+        },
+        {
+            "parameters": {
+                "operation": "trash",
+                "messageId": "={{$json.id}}"
+            },
+            "id": "4",
+            "name": "Move To Trash",
+            "type": "n8n-nodes-base.gmail",
+            "typeVersion": 2.1,
+            "position": [950, 300],
+            "credentials": {
+                "gmailOAuth2": {
+                    "id": "YOUR_GMAIL_CREDENTIAL_ID",
+                    "name": "Gmail Account"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Schedule Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Find Unwanted Emails",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Find Unwanted Emails": {
+            "main": [
+                [
+                    {
+                        "node": "Filter Important Emails",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Filter Important Emails": {
+            "main": [
+                [
+                    {
+                        "node": "Move To Trash",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
     },
-    {
-      "parameters": {
-        "chatId": "YOUR_TELEGRAM_CHAT_ID",
-        "text": "🔥 TREND DETECTED\n\nChannel: {{$json[\"channelTitle\"]}}\n\nTitle: {{$json[\"title\"]}}\n\nViews: {{$json[\"views\"]}}\n\nVelocity: {{$json[\"velocity\"]}}\n\nTrend: {{$json[\"trend\"]}}\n\nAI Analysis:\n{{$json[\"choices\"][0][\"message\"][\"content\"]}}"
-      },
-      "id": "telegram_report",
-      "name": "Telegram Trend Report",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1,
-      "position": [
-        2450,
-        300
-      ]
-    }
-  ],
-  "connections": {
-    "Schedule Trigger": {
-      "main": [
-        [
-          {
-            "node": "Get Subscribed Channels",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "active": False,
+    "settings": {
+        "executionOrder": "v1"
     },
-    "Get Subscribed Channels": {
-      "main": [
-        [
-          {
-            "node": "Extract Channel IDs",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "versionId": "1",
+    "meta": {
+        "templateCredsSetupCompleted": False
     },
-    "Extract Channel IDs": {
-      "main": [
-        [
-          {
-            "node": "Split Channels",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Split Channels": {
-      "main": [
-        [
-          {
-            "node": "Get Latest Uploads",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Get Latest Uploads": {
-      "main": [
-        [
-          {
-            "node": "Extract Video Data",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Extract Video Data": {
-      "main": [
-        [
-          {
-            "node": "Get Video Statistics",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Get Video Statistics": {
-      "main": [
-        [
-          {
-            "node": "Calculate Trend Velocity",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Calculate Trend Velocity": {
-      "main": [
-        [
-          {
-            "node": "Gemini Trend Analysis",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Gemini Trend Analysis": {
-      "main": [
-        [
-          {
-            "node": "Telegram Trend Report",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
-  },
-  "active": false,
-  "settings": {},
-  "versionId": "CHAOSZILLA_SUBSCRIPTION_ANALYZER_V1"
+    "id": "gmail-cleaner-workflow"
 }
+
+path = Path("/mnt/data/n8n_gmail_cleaner_workflow.json")
+path.write_text(json.dumps(workflow, indent=2))
+
+print(f"Saved workflow JSON to: {path}")
